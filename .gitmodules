@@ -1,0 +1,3 @@
+[submodule "src/openvmm"]
+	path = src/openvmm
+	url = https://github.com/microsoft/openvmm
