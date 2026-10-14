@@ -71,12 +71,15 @@ flowchart TB
 - SEV-SNP enabled and provisioned in platform firmware (see §3).
 - Sufficient RAM/cores; reserve headroom for VTL2 (OpenHCL needs its own slice of
   guest memory, typically a few hundred MB per CVM).
-- A removable/virtual media path for the Azure Linux ISO (BMC/iDRAC/iLO virtual
+- A removable/virtual media path for the installer ISO (BMC/iDRAC/iLO virtual
   media, or a USB stick).
 
 ### Software / artifacts you will produce or download
-- **Azure Linux 3.0** ISO (installer).
-- **MSHV (Microsoft Hypervisor)** packages for Azure Linux + a dom0-capable kernel.
+- **Azure Linux installer ISO that already bundles MSHV** — produced by the ADO
+  pipeline run
+  [2610.3.1-ci.159380829](https://microsoft.visualstudio.com/LSG/_build/results?buildId=159380829&view=artifacts&pathAsName=false&type=publishedArtifacts).
+  Booting and installing from this ISO installs the Microsoft Hypervisor and a
+  dom0-capable kernel for you — no separate MSHV package install is required.
 - **OpenVMM** binary (`openvmm`) — built on this host or downloaded from CI.
 - **OpenHCL IGVM** image, CVM recipe (`openhcl-x64-cvm.bin`) — built on Linux/WSL2.
 - **ohcldiag-dev** — diagnostics tool for OpenHCL.
@@ -89,10 +92,19 @@ flowchart TB
 
 ---
 
-## 2. Stage 1 — Install Azure Linux natively from the ISO
+## 2. Stage 1 — Install Azure Linux (with MSHV) natively from the ISO
+
+This stage uses the pipeline-produced ISO, which already includes MSHV and a
+dom0 kernel. Installing from it gives you an Azure Linux root partition with the
+Microsoft Hypervisor in place.
+
+0. **Download the ISO** from the ADO build artifacts for run
+   [2610.3.1-ci.159380829](https://microsoft.visualstudio.com/LSG/_build/results?buildId=159380829&view=artifacts&pathAsName=false&type=publishedArtifacts)
+   (Artifacts tab → published artifacts → the `*.iso`). You must be signed in to
+   the Microsoft ADO org to access it.
 
 1. **Attach the ISO** via BMC virtual media (or write it to USB with
-   `dd if=azurelinux-3.0-x86_64.iso of=/dev/sdX bs=4M status=progress && sync`).
+   `dd if=<downloaded>.iso of=/dev/sdX bs=4M status=progress && sync`).
 
 2. **Boot the installer.** In firmware/BIOS set boot mode to **UEFI** (required
    for Secure Boot and for the CVM guest path), and boot the ISO.
@@ -124,11 +136,12 @@ flowchart TB
 
 ---
 
-## 3. Stage 2 — Enable SEV-SNP and install/boot MSHV
+## 3. Stage 2 — Enable SEV-SNP and verify MSHV
 
 The guest's vTPM protection ultimately rests on two things being active on the
 host: **SEV-SNP** (memory encryption/integrity) and **MSHV** (the hypervisor that
-provides VTLs). Do both here.
+provides VTLs). MSHV was already installed by the Stage 1 ISO, so here you enable
+SEV-SNP in firmware/kernel and then confirm MSHV is live.
 
 ### 3a. Enable SEV-SNP in platform firmware
 Reboot into BIOS/UEFI setup and enable (names vary by OEM):
@@ -159,32 +172,21 @@ sudo dmesg | grep -iE "SEV|SNP|ccp|RMP"
 ls -l /dev/sev 2>/dev/null && echo "/dev/sev present"
 ```
 
-### 3c. Install MSHV (the Microsoft Hypervisor) and a dom0 kernel
-Azure Linux provides the Microsoft Hypervisor and a dom0 (root-partition) kernel
-so the Linux install acts as the **root partition** of MSHV, analogous to the
-Hyper-V parent partition. Install the hypervisor + dom0 kernel packages, then set
-the hypervisor to launch at boot:
-
-```bash
-# Package names are version-specific in Azure Linux 3.0; search first:
-sudo tdnf repolist
-sudo tdnf search hypervisor
-sudo tdnf search mshv
-sudo tdnf search dom0
-
-# Typical set (confirm exact names from the search output on your build):
-sudo tdnf -y install hvloader mshv kernel-mshv   # names may differ per release
-```
-
-The Microsoft Hypervisor is chain-loaded before the Linux root partition. Confirm
-your boot entry launches the hypervisor (`hvloader`/the MSHV loader) and then the
-dom0 kernel. On systemd-boot, inspect the loader entries:
+### 3c. Confirm MSHV (the Microsoft Hypervisor) and dom0 kernel from the ISO
+The Stage 1 ISO already installed the Microsoft Hypervisor and a dom0
+(root-partition) kernel, so the Linux install acts as the **root partition** of
+MSHV, analogous to the Hyper-V parent partition. The hypervisor is chain-loaded
+before the Linux root partition; confirm the boot entry launches the hypervisor
+loader and then the dom0 kernel. On systemd-boot, inspect the loader entries:
 
 ```bash
 bootctl status
 ls /boot/loader/entries/
 cat /boot/loader/entries/*mshv*.conf 2>/dev/null
 ```
+
+If the MSHV boot entry is not the default, set it so the host always boots the
+hypervisor + dom0 kernel. (Only if the ISO did not pre-select it.)
 
 ### 3d. Verify MSHV is live and exposes VTL support
 After rebooting into the MSHV + dom0 kernel:
