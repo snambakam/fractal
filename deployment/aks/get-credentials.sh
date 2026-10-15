@@ -23,5 +23,5 @@ az aks get-credentials \
 if command -v kubectl >/dev/null 2>&1; then
     kubectl get nodes -o wide
 else
-    echo "kubectl not found; install it with 'az aks install-cli' to inspect the cluster."
+    echo "kubectl not found; run support/developer/scripts/setup-devenv.sh (or 'az aks install-cli') to inspect the cluster."
 fi

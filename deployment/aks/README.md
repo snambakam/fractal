@@ -8,6 +8,7 @@ Scripts for launching and tearing down an Azure Kubernetes Service (AKS) cluster
 | `get-credentials.sh` | Merges the cluster credentials into your kubeconfig and lists the nodes. |
 | `delete-cluster.sh` | Deletes the cluster. `--delete-resource-group` removes the whole group; `--yes` skips the prompt. |
 | `common.sh` | Shared defaults and helpers (sourced, not run). |
+| `config.example` | Template for the `~/.aks/config` settings file. |
 
 ## Usage
 
@@ -20,7 +21,19 @@ kubectl get nodes
 
 ## Settings
 
-Override any of these through the environment.
+Settings are resolved in this order, highest priority first:
+
+1. Environment variables.
+2. The config file `~/.aks/config` (override the location with `AKS_CONFIG_FILE`).
+3. The defaults below.
+
+To create your config file:
+
+```bash
+mkdir -p ~/.aks && cp config.example ~/.aks/config
+```
+
+The config file lives outside the repository so personal values such as your subscription ID are not committed.
 
 | Variable | Default |
 |---|---|

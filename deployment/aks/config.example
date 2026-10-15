@@ -1,0 +1,16 @@
+# Example AKS settings. Copy to ~/.aks/config and edit:
+#
+#   mkdir -p ~/.aks && cp config.example ~/.aks/config
+#
+# This file is sourced by the scripts, so use plain shell assignments.
+# Environment variables take precedence over values set here.
+# Uncomment only the settings you want to change.
+
+# AKS_SUBSCRIPTION="00000000-0000-0000-0000-000000000000"
+# AKS_RESOURCE_GROUP="fractal-rg"
+# AKS_CLUSTER_NAME="fractal-aks"
+# AKS_LOCATION="westus3"
+# AKS_NODE_COUNT=3
+# AKS_NODE_VM_SIZE="Standard_D4s_v5"
+# AKS_OS_SKU="AzureLinux"
+# AKS_KUBERNETES_VERSION=""
