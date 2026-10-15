@@ -125,6 +125,19 @@ install_rust() {
     echo "Rust installed. Run 'source \"\$HOME/.cargo/env\"' or open a new shell to use it."
 }
 
+# Fedora ships kubectl in versioned packages (e.g. kubernetes1.34-client), so
+# "kubectl" resolves to the newest. Set KUBECTL_PKG to pick a version that is
+# within one minor release of your cluster.
+install_kubectl() {
+    if command -v kubectl >/dev/null 2>&1; then
+        echo "kubectl already installed: $(command -v kubectl)"
+        return 0
+    fi
+
+    echo "Installing ${KUBECTL_PKG:-kubectl}"
+    sudo dnf -y install "${KUBECTL_PKG:-kubectl}"
+}
+
 #
 # Main
 #
@@ -151,6 +164,8 @@ if ! command -v dnf >/dev/null 2>&1; then
 fi
 
 install_pkgs "${BASE_PKGS[@]}" "${OPENVMM_PKGS[@]}" "${RUST_KEYLIME_PKGS[@]}" "${KEYLIME_PKGS[@]}"
+
+install_kubectl
 
 if ! $skip_rust; then
     install_rust
