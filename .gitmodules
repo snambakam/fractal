@@ -1,3 +1,9 @@
 [submodule "src/openvmm"]
 	path = src/openvmm
 	url = https://github.com/microsoft/openvmm
+[submodule "src/keylime/keylime"]
+	path = src/keylime/keylime
+	url = https://github.com/snambakam/keylime
+[submodule "src/keylime/rust-keylime"]
+	path = src/keylime/rust-keylime
+	url = https://github.com/snambakam/rust-keylime
