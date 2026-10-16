@@ -7,3 +7,6 @@
 [submodule "src/keylime/rust-keylime"]
 	path = src/keylime/rust-keylime
 	url = https://github.com/snambakam/rust-keylime
+[submodule "src/keylime/attestation-operator"]
+	path = src/keylime/attestation-operator
+	url = https://github.com/keylime/attestation-operator
