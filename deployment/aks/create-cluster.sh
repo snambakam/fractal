@@ -18,7 +18,7 @@ source "$SCRIPT_DIR/common.sh"
 
 ensure_az_login
 
-if [ "$(az group exists --name "$AKS_RESOURCE_GROUP")" = "true" ]; then
+if [ "$(az group exists --name "$AKS_RESOURCE_GROUP" | tr -d '\r')" = "true" ]; then
     echo "Resource group exists: $AKS_RESOURCE_GROUP"
 else
     echo "Creating resource group $AKS_RESOURCE_GROUP in $AKS_LOCATION"

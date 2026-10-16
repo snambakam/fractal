@@ -5,7 +5,7 @@ Scripts for launching and tearing down an Azure Kubernetes Service (AKS) cluster
 | Script | Purpose |
 |---|---|
 | `create-cluster.sh` | Creates the resource group and cluster if missing, then fetches credentials. Safe to re-run. |
-| `get-credentials.sh` | Merges the cluster credentials into your kubeconfig and lists the nodes. |
+| `get-credentials.sh` | Merges the cluster credentials into `~/.kube/config` (or the first path in `KUBECONFIG`), switches to the cluster's context, and lists the nodes. Requires `kubectl`. |
 | `delete-cluster.sh` | Deletes the cluster. `--delete-resource-group` removes the whole group; `--yes` skips the prompt. |
 | `common.sh` | Shared defaults and helpers (sourced, not run). |
 | `config.example` | Template for the `~/.aks/config` settings file. |

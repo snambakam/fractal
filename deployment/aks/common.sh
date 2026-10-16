@@ -63,7 +63,7 @@ ensure_az_login() {
         az account set --subscription "$AKS_SUBSCRIPTION"
     fi
 
-    echo "Subscription: $(az account show --query '[name, id]' -o tsv | paste -sd' ' -)"
+    echo "Subscription: $(az account show --query '[name, id]' -o tsv | tr -d '\r' | paste -sd' ' -)"
 }
 
 #
