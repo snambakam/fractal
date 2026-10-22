@@ -36,9 +36,10 @@ BASE_PKGS=(
     util-linux
 )
 
-# openvmm: cross-compiling for aarch64.
+# OpenVMM and OpenHCL: architecture-specific build tools.
 OPENVMM_PKGS=(
     binutils-aarch64-linux-gnu
+    binutils-x86_64-linux-gnu
     gcc-aarch64-linux-gnu
 )
 
@@ -117,12 +118,44 @@ install_pkgs() {
 install_rust() {
     if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
         echo "Rust already installed: $(rustc --version)"
-        return 0
+    else
+        echo "Installing the Rust toolchain via rustup"
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+        export PATH="$HOME/.cargo/bin:$PATH"
+        echo "Rust installed. Run 'source \"\$HOME/.cargo/env\"' or open a new shell to use it."
     fi
 
-    echo "Installing the Rust toolchain via rustup"
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-    echo "Rust installed. Run 'source \"\$HOME/.cargo/env\"' or open a new shell to use it."
+    if ! command -v rustup >/dev/null 2>&1; then
+        echo "Error: rustup is required to install the OpenHCL Rust targets." >&2
+        return 1
+    fi
+
+    rustup component add \
+        clippy \
+        rustfmt
+
+    rustup target add \
+        x86_64-unknown-linux-musl \
+        x86_64-unknown-none
+}
+
+restore_openvmm_packages() {
+    local repo_root stage_dir
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+    stage_dir="$repo_root/stage/openvmm"
+
+    if ! command -v cargo >/dev/null 2>&1; then
+        echo "Error: cargo is required to restore OpenVMM dependencies. Install Rust or omit --skip-rust." >&2
+        exit 1
+    fi
+
+    echo "Restoring OpenVMM development dependencies"
+    pushd "$repo_root/src/openvmm" >/dev/null
+    CARGO_TARGET_DIR="$stage_dir/target" cargo xflowey \
+        --out-dir "$stage_dir" \
+        --persist-dir "$stage_dir/persist" \
+        restore-packages
+    popd >/dev/null
 }
 
 # Fedora ships kubectl in versioned packages (e.g. kubernetes1.34-client), so
@@ -170,5 +203,7 @@ install_kubectl
 if ! $skip_rust; then
     install_rust
 fi
+
+restore_openvmm_packages
 
 echo "Done. The development environment is ready."
