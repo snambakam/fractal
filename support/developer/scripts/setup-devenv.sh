@@ -32,6 +32,9 @@ BASE_PKGS=(
     pciutils
     pkgconf-pkg-config
     procps-ng
+    protobuf-compiler
+    protobuf-devel
+    rpm-build
     tar
     util-linux
 )
@@ -142,7 +145,7 @@ install_rust() {
 restore_openvmm_packages() {
     local repo_root stage_dir
     repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-    stage_dir="$repo_root/stage/openvmm"
+    stage_dir="$repo_root/build/stage/devenv"
 
     if ! command -v cargo >/dev/null 2>&1; then
         echo "Error: cargo is required to restore OpenVMM dependencies. Install Rust or omit --skip-rust." >&2
