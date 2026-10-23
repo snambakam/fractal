@@ -14,7 +14,7 @@ OPENVMM_PROFILE ?= $(if $(filter --release,$(OPENVMM_ARGS)),release,debug)
 OPENHCL_PROFILE ?= $(if $(filter --release,$(OPENHCL_ARGS)),release,debug)
 RPMBUILD ?= rpmbuild
 RPM_VERSION ?= $(shell cd src/openvmm && $(CARGO) metadata --offline --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "openvmm") | .version')
-RPM_RELEASE ?= 1
+RPM_RELEASE ?= 2
 
 REPO_ROOT := $(CURDIR)
 OPENVMM_STAGE := $(abspath build/stage/openvmm)
