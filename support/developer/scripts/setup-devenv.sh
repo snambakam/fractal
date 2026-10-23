@@ -28,9 +28,12 @@ BASE_PKGS=(
     git
     glibc-devel
     jq
+    kernel-headers
+    libarchive
     make
     openssl-devel
     pciutils
+    perl
     procps-ng
     protobuf-compiler
     protobuf-devel
