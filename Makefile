@@ -9,6 +9,9 @@ export PROTOC
 OPENVMM_ARGS ?=
 OPENHCL_RECIPE ?= x64
 OPENHCL_ARGS ?=
+KERNEL_MSHV_SRC ?= $(abspath ../LSG-linux-rolling)
+KERNEL_MSHV_CONFIG ?= $(abspath $(KERNEL_MSHV_SRC))/Microsoft/configs/x86/mshv_defconfig
+KERNEL_MSHV_ARGS ?=
 
 OPENVMM_PROFILE ?= $(if $(filter --release,$(OPENVMM_ARGS)),release,debug)
 OPENHCL_PROFILE ?= $(if $(filter --release,$(OPENHCL_ARGS)),release,debug)
@@ -19,10 +22,11 @@ RPM_RELEASE ?= 2
 REPO_ROOT := $(CURDIR)
 OPENVMM_STAGE := $(abspath build/stage/openvmm)
 OPENHCL_STAGE := $(abspath build/stage/openhcl)
+KERNEL_MSHV_STAGE := $(abspath build/stage/kernel-mshv)
 DEVENV_STAGE := $(abspath build/stage/devenv)
 RPM_OUT := $(abspath build/out)
 
-.PHONY: build-openvmm build-openhcl package-openvmm package-openhcl clean-openvmm clean-openhcl
+.PHONY: build-openvmm build-openhcl build-kernel-mshv package-openvmm package-openhcl package-kernel-mshv clean-openvmm clean-openhcl clean-kernel-mshv
 
 build-openvmm:
 	cd src/openvmm && \
@@ -40,6 +44,17 @@ build-openhcl:
 		build-igvm \
 		$(OPENHCL_RECIPE) \
 		$(OPENHCL_ARGS)
+
+$(KERNEL_MSHV_STAGE)/.config: $(KERNEL_MSHV_CONFIG)
+	mkdir -p "$(KERNEL_MSHV_STAGE)"
+	cp -- "$<" "$@"
+
+build-kernel-mshv: $(KERNEL_MSHV_STAGE)/.config
+	$(MAKE) -C "$(KERNEL_MSHV_SRC)" O="$(KERNEL_MSHV_STAGE)" $(KERNEL_MSHV_ARGS) olddefconfig
+	$(MAKE) -C "$(KERNEL_MSHV_SRC)" O="$(KERNEL_MSHV_STAGE)" $(KERNEL_MSHV_ARGS) all
+
+package-kernel-mshv: build-kernel-mshv
+	$(MAKE) -C "$(KERNEL_MSHV_SRC)" O="$(KERNEL_MSHV_STAGE)" $(KERNEL_MSHV_ARGS) binrpm-pkg
 
 package-openvmm: build-openvmm
 	$(RPMBUILD) \
@@ -72,3 +87,6 @@ clean-openvmm:
 
 clean-openhcl:
 	rm -rf -- "$(OPENHCL_STAGE)"
+
+clean-kernel-mshv:
+	rm -rf -- "$(KERNEL_MSHV_STAGE)"

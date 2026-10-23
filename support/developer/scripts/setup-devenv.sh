@@ -4,7 +4,7 @@ set -e
 
 #
 # Install the packages needed to build and develop the components in this
-# repository (openvmm, keylime, rust-keylime) on Fedora or Azure Linux.
+# repository (openvmm, keylime, rust-keylime, kernel-mshv) on Fedora or Azure Linux.
 #
 # Usage: setup-devenv.sh [--skip-rust]
 #
@@ -47,6 +47,26 @@ OPENVMM_PKGS=(
     binutils-aarch64-linux-gnu
     binutils-x86_64-linux-gnu
     gcc-aarch64-linux-gnu
+)
+
+KERNEL_PKGS=(
+    bc
+    bison
+    cpio
+    diffutils
+    dwarves
+    elfutils-devel
+    elfutils-libelf-devel
+    findutils
+    flex
+    gzip
+    kmod
+    ncurses-devel
+    openssl
+    rsync
+    xz
+    zlib-devel
+    zstd
 )
 
 # rust-keylime: build dependencies.
@@ -228,15 +248,18 @@ case "${ID:-}" in
     azurelinux|mariner)
         package_manager=tdnf
         BASE_PKGS+=(pkg-config)
+        KERNEL_PKGS+=(net-tools)
         ;;
     fedora)
         package_manager=dnf
         BASE_PKGS+=(pkgconf-pkg-config)
+        KERNEL_PKGS+=(gcc-plugin-devel hostname)
         ;;
     *)
         if [[ " ${ID_LIKE:-} " == *" fedora "* ]]; then
             package_manager=dnf
             BASE_PKGS+=(pkgconf-pkg-config)
+            KERNEL_PKGS+=(gcc-plugin-devel hostname)
         else
             echo "Error: this script supports Fedora-based distributions and Azure Linux only." >&2
             exit 1
@@ -249,7 +272,7 @@ if ! command -v "$package_manager" >/dev/null 2>&1; then
     exit 1
 fi
 
-install_pkgs "${BASE_PKGS[@]}" "${OPENVMM_PKGS[@]}" "${RUST_KEYLIME_PKGS[@]}" "${KEYLIME_PKGS[@]}"
+install_pkgs "${BASE_PKGS[@]}" "${OPENVMM_PKGS[@]}" "${KERNEL_PKGS[@]}" "${RUST_KEYLIME_PKGS[@]}" "${KEYLIME_PKGS[@]}"
 
 install_kubectl
 

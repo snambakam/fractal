@@ -36,6 +36,36 @@ make build-openvmm OPENVMM_ARGS="--release"
 make build-openhcl OPENHCL_RECIPE=x64-cvm OPENHCL_ARGS="--release"
 ```
 
+### MSHV Kernel
+
+The kernel targets use a sibling `../LSG-linux-rolling` checkout by default,
+with its `Microsoft/configs/x86/mshv_defconfig` configuration:
+
+```bash
+make -j"$(nproc)" build-kernel-mshv
+make -j"$(nproc)" package-kernel-mshv
+```
+
+This is an out-of-tree build: configuration, compiled artifacts, and RPM working
+files stay under `build/stage/kernel-mshv/`. Binary RPMs are generated under
+`build/stage/kernel-mshv/rpmbuild/RPMS/` by the kernel's native `binrpm-pkg`
+target. These upstream packages are named `kernel`, `kernel-headers`, and
+`kernel-devel`, not the Azure Linux distribution's `kernel-mshv` package.
+
+Override `KERNEL_MSHV_SRC` to select another source checkout,
+`KERNEL_MSHV_CONFIG` to select another configuration, or `KERNEL_MSHV_ARGS`
+to pass kernel make variables such as `LLVM=1`. The selected configuration seeds
+the staged `.config`; subsequent builds preserve it unless the input configuration
+is newer. Run `make clean-kernel-mshv` before switching configurations or source
+checkouts. The clean target removes the entire kernel staging directory,
+including its RPMs, without modifying the source checkout.
+
+The development setup script installs kernel build and RPM prerequisites,
+including bison, flex, ELF development libraries, GCC plugin headers, and
+`dwarves` for BTF, plus ncurses headers for interactive configuration. Run
+`./support/developer/scripts/setup-devenv.sh` before building. The make targets
+do not install dependencies or install the kernel on the host.
+
 ## RPM Packaging
 
 The setup script installs `rpm-build`. Each packaging target first builds its
