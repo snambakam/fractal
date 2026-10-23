@@ -4,7 +4,7 @@ set -e
 
 #
 # Install the packages needed to build and develop the components in this
-# repository (openvmm, keylime, rust-keylime) on a Fedora-based environment.
+# repository (openvmm, keylime, rust-keylime) on Fedora or Azure Linux.
 #
 # Usage: setup-devenv.sh [--skip-rust]
 #
@@ -26,11 +26,11 @@ BASE_PKGS=(
     gcc
     gcc-c++
     git
+    glibc-devel
     jq
     make
     openssl-devel
     pciutils
-    pkgconf-pkg-config
     procps-ng
     protobuf-compiler
     protobuf-devel
@@ -99,9 +99,15 @@ install_pkgs() {
         return 0
     fi
 
-    # Package names vary between Fedora releases; skip any that are unavailable.
+    # Package names vary between distributions; skip any that are unavailable.
     local available
-    available="$(dnf repoquery --quiet --available --qf '%{name}\n' "${missing[@]}" | sort -u)"
+    if [[ "$package_manager" == tdnf ]]; then
+        local package_list
+        package_list="$(tdnf -q list available)"
+        available="$(awk '{ name = $1; sub(/\.[^.]+$/, "", name); print name }' <<<"$package_list" | sort -u)"
+    else
+        available="$(dnf repoquery --quiet --available --qf '%{name}\n' "${missing[@]}" | sort -u)"
+    fi
 
     local to_install=()
     for pkg in "${missing[@]}"; do
@@ -114,7 +120,7 @@ install_pkgs() {
 
     if [ ${#to_install[@]} -gt 0 ]; then
         echo "Installing: ${to_install[*]}"
-        sudo dnf -y install "${to_install[@]}"
+        sudo "$package_manager" -y install "${to_install[@]}"
     fi
 }
 
@@ -161,17 +167,37 @@ restore_openvmm_packages() {
     popd >/dev/null
 }
 
+configure_cloud_native_repo() {
+    local architecture repo_id repo_url enabled_repos repo_config
+    architecture="$(uname -m)"
+    repo_id="azurelinux${VERSION_ID}prodcloud-native${architecture}"
+    repo_url="https://packages.microsoft.com/azurelinux/${VERSION_ID}/prod/cloud-native/${architecture}/config.repo"
+    enabled_repos="$(tdnf repolist)"
+
+    if awk -v repo_id="$repo_id" '$1 == repo_id { found = 1 } END { exit !found }' <<<"$enabled_repos"; then
+        return 0
+    fi
+
+    echo "Configuring Azure Linux cloud-native repository: $repo_url"
+    repo_config="$(curl --fail --silent --show-error --location "$repo_url")"
+    printf '%s\n' "$repo_config" | sudo tee /etc/yum.repos.d/azurelinux-cloud-native.repo >/dev/null
+}
+
 # Fedora ships kubectl in versioned packages (e.g. kubernetes1.34-client), so
 # "kubectl" resolves to the newest. Set KUBECTL_PKG to pick a version that is
 # within one minor release of your cluster.
 install_kubectl() {
+    if [[ "${ID:-}" == azurelinux && "${VERSION_ID:-}" == 3.0 ]]; then
+        configure_cloud_native_repo
+    fi
+
     if command -v kubectl >/dev/null 2>&1; then
         echo "kubectl already installed: $(command -v kubectl)"
         return 0
     fi
 
     echo "Installing ${KUBECTL_PKG:-kubectl}"
-    sudo dnf -y install "${KUBECTL_PKG:-kubectl}"
+    sudo "$package_manager" -y install "${KUBECTL_PKG:-kubectl}"
 }
 
 #
@@ -189,13 +215,34 @@ for arg in "$@"; do
     esac
 done
 
-if [ ! -f /etc/os-release ] || ! grep -qiE '^(ID|ID_LIKE)=.*fedora' /etc/os-release; then
-    echo "Error: this script supports Fedora-based distributions only." >&2
+if [[ ! -f /etc/os-release ]]; then
+    echo "Error: /etc/os-release not found." >&2
     exit 1
 fi
 
-if ! command -v dnf >/dev/null 2>&1; then
-    echo "Error: dnf not found." >&2
+. /etc/os-release
+case "${ID:-}" in
+    azurelinux|mariner)
+        package_manager=tdnf
+        BASE_PKGS+=(pkg-config)
+        ;;
+    fedora)
+        package_manager=dnf
+        BASE_PKGS+=(pkgconf-pkg-config)
+        ;;
+    *)
+        if [[ " ${ID_LIKE:-} " == *" fedora "* ]]; then
+            package_manager=dnf
+            BASE_PKGS+=(pkgconf-pkg-config)
+        else
+            echo "Error: this script supports Fedora-based distributions and Azure Linux only." >&2
+            exit 1
+        fi
+        ;;
+esac
+
+if ! command -v "$package_manager" >/dev/null 2>&1; then
+    echo "Error: $package_manager not found." >&2
     exit 1
 fi
 
