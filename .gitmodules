@@ -10,3 +10,7 @@
 [submodule "src/keylime/attestation-operator"]
 	path = src/keylime/attestation-operator
 	url = https://github.com/snambakam/attestation-operator
+[submodule "src/linux"]
+	path = src/linux
+	url = https://msazure.visualstudio.com/DefaultCollection/LSG-linux/_git/LSG-linux-rolling
+	branch = user/snambakam/mshv-enable-vsm

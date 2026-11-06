@@ -9,7 +9,7 @@ export PROTOC
 OPENVMM_ARGS ?=
 OPENHCL_RECIPE ?= x64
 OPENHCL_ARGS ?=
-KERNEL_MSHV_SRC ?= $(abspath ../LSG-linux-rolling)
+KERNEL_MSHV_SRC ?= $(abspath src/linux)
 KERNEL_MSHV_CONFIG ?= $(abspath $(KERNEL_MSHV_SRC))/Microsoft/configs/x86/mshv_defconfig
 KERNEL_MSHV_ARGS ?=
 
@@ -33,6 +33,7 @@ build-openvmm:
 		CARGO_TARGET_DIR="$(OPENVMM_STAGE)/target" \
 		$(CARGO) build \
 		-p openvmm \
+		-p ohcldiag-dev \
 		$(OPENVMM_ARGS)
 
 build-openhcl:
@@ -54,7 +55,15 @@ build-kernel-mshv: $(KERNEL_MSHV_STAGE)/.config
 	$(MAKE) -C "$(KERNEL_MSHV_SRC)" O="$(KERNEL_MSHV_STAGE)" $(KERNEL_MSHV_ARGS) all
 
 package-kernel-mshv: build-kernel-mshv
-	$(MAKE) -C "$(KERNEL_MSHV_SRC)" O="$(KERNEL_MSHV_STAGE)" $(KERNEL_MSHV_ARGS) binrpm-pkg
+	$(RPMBUILD) \
+		-bb \
+		--target x86_64 \
+		--define '_topdir $(KERNEL_MSHV_STAGE)/rpmbuild' \
+		--define '_rpmdir $(KERNEL_MSHV_STAGE)/rpmbuild/RPMS' \
+		--define 'kernel_stage $(KERNEL_MSHV_STAGE)' \
+		--define 'kernel_release $(shell cat "$(KERNEL_MSHV_STAGE)/include/config/kernel.release")' \
+		--define 'package_release $(RPM_RELEASE)' \
+		build/package/RPM/kernel-mshv-local/kernel-mshv-local.spec
 
 package-openvmm: build-openvmm
 	$(RPMBUILD) \
