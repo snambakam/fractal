@@ -38,27 +38,11 @@ make build-openhcl OPENHCL_RECIPE=x64-cvm OPENHCL_ARGS="--release"
 
 ### MSHV Kernel
 
-The kernel targets use the `src/linux` LSG-linux-rolling submodule by default,
-with its `Microsoft/configs/x86/mshv_defconfig` configuration. Initialize it
-before building (access to the Azure DevOps repository is required):
+The kernel source is not included as a submodule, and the Makefile does not
+build, package, or clean the MSHV kernel. Manage the LSG-linux-rolling source
+revision and build separately.
 
-```bash
-git submodule update --init src/linux
-```
-
-The submodule tracks `user/snambakam/mshv-enable-vsm` for remote updates; normal
-submodule initialization uses the commit pinned by this repository.
-
-Build and package the kernel with:
-
-```bash
-make -j"$(nproc)" build-kernel-mshv
-make -j"$(nproc)" package-kernel-mshv
-```
-
-This is an out-of-tree build: configuration, compiled artifacts, and RPM working
-files stay under `build/stage/kernel-mshv/`. The `kernel-mshv-local` RPM is
-generated under `build/stage/kernel-mshv/rpmbuild/RPMS/`. It contains the boot
+The `kernel-mshv-local` RPM specification contains the boot
 image, config, System.map, and modules, without providing the generic `kernel`
 capability that conflicts with Azure Linux's installed `kernel-mshv`. It does
 not build or replace userspace headers, development packages, or host tools.
@@ -103,19 +87,11 @@ reboot, automatically fall back after a failed boot, or prove that the kernel
 will start Hyper-V. Without console or remote power access, a failed boot can
 leave the host unreachable; arrange recovery before rebooting.
 
-Override `KERNEL_MSHV_SRC` to select another source checkout,
-`KERNEL_MSHV_CONFIG` to select another configuration, or `KERNEL_MSHV_ARGS`
-to pass kernel make variables such as `LLVM=1`. The selected configuration seeds
-the staged `.config`; subsequent builds preserve it unless the input configuration
-is newer. Run `make clean-kernel-mshv` before switching configurations or source
-checkouts. The clean target removes the entire kernel staging directory,
-including its RPMs, without modifying the source checkout.
-
 The development setup script installs kernel build and RPM prerequisites,
 including bison, flex, ELF development libraries, GCC plugin headers, and
 `dwarves` for BTF, plus ncurses headers for interactive configuration. Run
-`./support/developer/scripts/setup-devenv.sh` before building. The make targets
-do not install dependencies or install the kernel on the host.
+`./support/developer/scripts/setup-devenv.sh` before building. The setup script
+does not build or install the kernel on the host.
 
 ## Native VSM Bring-up
 

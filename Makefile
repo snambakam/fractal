@@ -9,9 +9,6 @@ export PROTOC
 OPENVMM_ARGS ?=
 OPENHCL_RECIPE ?= x64
 OPENHCL_ARGS ?=
-KERNEL_MSHV_SRC ?= $(abspath src/linux)
-KERNEL_MSHV_CONFIG ?= $(abspath $(KERNEL_MSHV_SRC))/Microsoft/configs/x86/mshv_defconfig
-KERNEL_MSHV_ARGS ?=
 
 OPENVMM_PROFILE ?= $(if $(filter --release,$(OPENVMM_ARGS)),release,debug)
 OPENHCL_PROFILE ?= $(if $(filter --release,$(OPENHCL_ARGS)),release,debug)
@@ -22,11 +19,10 @@ RPM_RELEASE ?= 2
 REPO_ROOT := $(CURDIR)
 OPENVMM_STAGE := $(abspath build/stage/openvmm)
 OPENHCL_STAGE := $(abspath build/stage/openhcl)
-KERNEL_MSHV_STAGE := $(abspath build/stage/kernel-mshv)
 DEVENV_STAGE := $(abspath build/stage/devenv)
 RPM_OUT := $(abspath build/out)
 
-.PHONY: build-openvmm build-openhcl build-kernel-mshv package-openvmm package-openhcl package-kernel-mshv clean-openvmm clean-openhcl clean-kernel-mshv
+.PHONY: build-openvmm build-openhcl package-openvmm package-openhcl clean-openvmm clean-openhcl
 
 build-openvmm:
 	cd src/openvmm && \
@@ -45,25 +41,6 @@ build-openhcl:
 		build-igvm \
 		$(OPENHCL_RECIPE) \
 		$(OPENHCL_ARGS)
-
-$(KERNEL_MSHV_STAGE)/.config: $(KERNEL_MSHV_CONFIG)
-	mkdir -p "$(KERNEL_MSHV_STAGE)"
-	cp -- "$<" "$@"
-
-build-kernel-mshv: $(KERNEL_MSHV_STAGE)/.config
-	$(MAKE) -C "$(KERNEL_MSHV_SRC)" O="$(KERNEL_MSHV_STAGE)" $(KERNEL_MSHV_ARGS) olddefconfig
-	$(MAKE) -C "$(KERNEL_MSHV_SRC)" O="$(KERNEL_MSHV_STAGE)" $(KERNEL_MSHV_ARGS) all
-
-package-kernel-mshv: build-kernel-mshv
-	$(RPMBUILD) \
-		-bb \
-		--target x86_64 \
-		--define '_topdir $(KERNEL_MSHV_STAGE)/rpmbuild' \
-		--define '_rpmdir $(KERNEL_MSHV_STAGE)/rpmbuild/RPMS' \
-		--define 'kernel_stage $(KERNEL_MSHV_STAGE)' \
-		--define 'kernel_release $(shell cat "$(KERNEL_MSHV_STAGE)/include/config/kernel.release")' \
-		--define 'package_release $(RPM_RELEASE)' \
-		build/package/RPM/kernel-mshv-local/kernel-mshv-local.spec
 
 package-openvmm: build-openvmm
 	$(RPMBUILD) \
@@ -96,6 +73,3 @@ clean-openvmm:
 
 clean-openhcl:
 	rm -rf -- "$(OPENHCL_STAGE)"
-
-clean-kernel-mshv:
-	rm -rf -- "$(KERNEL_MSHV_STAGE)"
