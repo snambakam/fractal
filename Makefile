@@ -30,6 +30,7 @@ build-openvmm:
 		$(CARGO) build \
 		-p openvmm \
 		-p ohcldiag-dev \
+		--features openvmm/tpm \
 		$(OPENVMM_ARGS)
 
 build-openhcl:

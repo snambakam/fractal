@@ -14,6 +14,8 @@ make build-openvmm
 make build-openhcl
 ```
 
+`build-openvmm` enables the optional `openvmm/tpm` Cargo feature so the binary
+and its RPM include the host-emulated vTPM device resolver.
 Build targets do not install development-environment packages. `build-openhcl` uses the
 upstream build pipeline to build an IGVM firmware image, defaulting to the `x64` recipe.
 The Makefile uses the system `protoc` from Fedora's `protobuf-compiler` package,

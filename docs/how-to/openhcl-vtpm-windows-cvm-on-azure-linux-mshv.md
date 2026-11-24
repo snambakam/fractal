@@ -9,6 +9,94 @@ hypervisor by running it inside OpenHCL (VTL2).
 This guide implements the design described in
 [OpenHCL Architecture](https://openvmm.dev/guide/reference/architecture/openhcl.html).
 
+## Initial milestone — Windows + host-emulated vTPM, without SEV-SNP
+
+Start here for functional bring-up on the MSHV test machine using the installed
+`openvmm`, `openvmm-diag`, and `openhcl` RPMs. This milestone does **not** use
+OpenHCL, VTL2, or SNP; the vTPM runs in the host OpenVMM process and is not
+protected from the host. The installed `/usr/share/openhcl/openhcl-x64.bin`
+is not needed for this step.
+
+The OpenVMM binary must be built with the `openvmm/tpm` Cargo feature; the
+repository's `build-openvmm` and `package-openvmm` targets enable it.
+If startup reports `no resolver for chipset_device_handle:tpm`, rebuild and
+redeploy the OpenVMM RPM from the build VM with this feature enabled. The
+`--tpm` runtime flag alone cannot enable a device omitted at compile time.
+
+> **Implementation boundary:** The current source's `virt_mshv` backend rejects
+> VTL2 configuration with `vtl2 not supported`. Therefore, the OpenHCL/SNP
+> stages below are a follow-up design, not a working deployment path for this
+> backend yet. Removing only `--isolation snp` from the later launch command
+> does not bypass this limitation.
+
+On the **test machine**, confirm the MSHV device and installed executable:
+
+```bash
+ls -l /dev/mshv
+/usr/bin/openvmm --version
+```
+
+Use an account with permission to access `/dev/mshv`. Point `DISK` at a prepared,
+UEFI-bootable Windows VHDX that the account can read and write:
+
+The repository's
+[`create-windows-vm.sh`](../../support/developer/scripts/create-windows-vm.sh)
+defaults to this VTL0-only configuration using the installed RPM firmware.
+Select the launch mode explicitly with `--mode`:
+
+```bash
+DISK="$HOME/images/windows.vhdx" ./support/developer/scripts/create-windows-vm.sh --mode vtl0
+# Follow-up modes; require MSHV VTL2 support:
+DISK="$HOME/images/windows.vhdx" ./support/developer/scripts/create-windows-vm.sh --mode vtl2
+DISK="$HOME/images/windows.vhdx" ./support/developer/scripts/create-windows-vm.sh --mode snp
+```
+
+`vtl2` uses `/usr/share/openhcl/openhcl-x64.bin`; `snp` uses
+`/usr/share/openhcl/openhcl-x64-cvm.bin` and requires SNP-capable hardware.
+Override `IGVM` for a different image built with the corresponding recipe.
+These options select launch arguments; they do not add backend support.
+`DIAG_SOCKET` overrides the OpenHCL socket path, which defaults to
+`$XDG_RUNTIME_DIR/openvmm-windows-<mode>.sock` (or under `$HOME` if
+`XDG_RUNTIME_DIR` is unset). This is a socket, not the `ohcldiag-dev` executable.
+
+Alternatively, run OpenVMM directly:
+
+```bash
+DISK="$HOME/images/windows.vhdx"
+
+/usr/bin/openvmm \
+  --hv \
+  --uefi firmware=/usr/share/openvmm/MSVM.fd \
+  --secure-boot \
+  --secure-boot-template windows \
+  --tpm \
+  --disk "file:${DISK}" \
+  -m 8GB --processors 4 \
+  --gfx
+```
+
+The disk is writable: use a disposable copy for initial testing. Do not add
+`--vtl2`, `--igvm`, `--isolation snp`, or the VTL2 device-relay options for this
+milestone. `ohcldiag-dev` is not used because no OpenHCL instance is running.
+Use OpenVMM's graphical-console/VNC access for Windows. Press `Ctrl-Q`, then
+`q`, to quit OpenVMM.
+
+In an elevated Windows PowerShell session, check:
+
+```powershell
+Get-Tpm | Format-List TpmPresent,TpmReady,TpmEnabled,TpmActivated
+Confirm-SecureBootUEFI
+```
+
+Expect `TpmPresent` to be `True`; provisioning may be needed before `TpmReady`
+becomes `True`. Secure Boot should report `True`.
+
+**Smoke-test state only:** Without `--vmgs`, guest firmware and vTPM state are
+stored in memory and do not persist across OpenVMM restarts, even though disk
+writes persist. Do not enable BitLocker or rely on TPM-sealed secrets in this
+configuration. Persistent VMGS must be configured and restart-tested before
+using those features.
+
 ---
 
 ## 0. How this stack protects the vTPM
@@ -66,7 +154,17 @@ flowchart TB
 
 ## 1. Prerequisites
 
-### Hardware
+### Machine roles
+- **Build VM:** An x86_64 Linux VM used to build OpenVMM, ohcldiag-dev, and
+  OpenHCL. It does not need SEV-SNP hardware or `/dev/mshv`. Use a distribution
+  compatible with the test machine's runtime libraries (preferably the same
+  Azure Linux release).
+- **Test machine:** The SEV-SNP-capable Azure Linux + MSHV host. Copy the built
+  artifacts here; Rust and the build toolchain are not needed to run them.
+- Run Stages 1–2 and 5 onward on the **test machine**. Stages 3–4 explicitly
+  distinguish build, transfer, and installation commands.
+
+### Test-machine hardware
 - AMD EPYC CPU with **SEV-SNP** support (3rd Gen "Milan" or newer).
 - SEV-SNP enabled and provisioned in platform firmware (see §3).
 - Sufficient RAM/cores; reserve headroom for VTL2 (OpenHCL needs its own slice of
@@ -80,8 +178,8 @@ flowchart TB
   [2610.3.1-ci.159380829](https://microsoft.visualstudio.com/LSG/_build/results?buildId=159380829&view=artifacts&pathAsName=false&type=publishedArtifacts).
   Booting and installing from this ISO installs the Microsoft Hypervisor and a
   dom0-capable kernel for you — no separate MSHV package install is required.
-- **OpenVMM** binary (`openvmm`) — built on this host or downloaded from CI.
-- **OpenHCL IGVM** image, CVM recipe (`openhcl-x64-cvm.bin`) — built on Linux/WSL2.
+- **OpenVMM** binary (`openvmm`) — built on the build VM or downloaded from CI.
+- **OpenHCL IGVM** image, CVM recipe (`openhcl-x64-cvm.bin`) — built on the build VM.
 - **ohcldiag-dev** — diagnostics tool for OpenHCL.
 - A **Windows guest image** (VHDX) prepared for Trusted Launch / CVM (UEFI +
   Secure Boot + TPM-aware).
@@ -226,36 +324,54 @@ chmod +x ./openvmm
 ./openvmm --version
 ```
 
-### Option B — Build OpenVMM on this host
+### Option B — Build OpenVMM on the build VM
+Run from the `fractal` repository root on the **build VM**:
+
 ```bash
-# Rust toolchain
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-
-# Build deps on Azure Linux
-sudo tdnf -y install git build-essential clang lld pkg-config openssl-devel \
-                     protobuf-compiler
-
-git clone https://github.com/microsoft/openvmm.git
-cd openvmm
-cargo xflowey restore-packages        # fetches UEFI (MSVM.fd), test kernels, etc.
-cargo build --release -p openvmm
-# Binary: ./target/release/openvmm
+./support/developer/scripts/setup-devenv.sh
+make build-openvmm OPENVMM_ARGS="--release"
+# Binaries:
+#   build/stage/openvmm/target/release/openvmm
+#   build/stage/openvmm/target/release/ohcldiag-dev
 ```
 
-### Configure runtime assets
-`cargo xflowey restore-packages` places the guest UEFI firmware used for the
-Windows guest:
+Setup restores dependencies on the build VM, including guest UEFI firmware.
+Transfer the binaries and firmware to the **test machine** (replace the SSH
+destination below):
 
-```
-.packages/hyperv.uefi.mscoreuefi.x64.RELEASE/MsvmX64/RELEASE_VS2022/FV/MSVM.fd
+```bash
+# Build VM, from the fractal repository root:
+TEST_HOST=user@snp-test-machine
+ssh "$TEST_HOST" 'mkdir -p "$HOME/openvmm-deploy"'
+scp build/stage/openvmm/target/release/{openvmm,ohcldiag-dev} \
+    src/openvmm/.packages/hyperv.uefi.mscoreuefi.x64.RELEASE/MsvmX64/RELEASE_VS2022/FV/MSVM.fd \
+    "$TEST_HOST:openvmm-deploy/"
 ```
 
+On the **test machine**, install the transferred files:
+
+```bash
+sudo install -d /opt/openvmm
+sudo install -m 0755 "$HOME/openvmm-deploy/openvmm" \
+    "$HOME/openvmm-deploy/ohcldiag-dev" /opt/openvmm/
+sudo install -m 0644 "$HOME/openvmm-deploy/MSVM.fd" /opt/openvmm/MSVM.fd
+ldd /opt/openvmm/openvmm
+ldd /opt/openvmm/ohcldiag-dev
+/opt/openvmm/openvmm --version
+```
+
+Install any runtime libraries reported as `not found` using the test machine's
+package manager before continuing. If the loader reports incompatible GLIBC
+versions, rebuild on a VM matching the test machine's distribution and release.
+
+### Configure runtime assets (test machine)
+For the CI-download option, also obtain the matching guest UEFI firmware and
+install it as `/opt/openvmm/MSVM.fd`.
 Export it so you don't pass `firmware=` every time (needed when running the
 `openvmm` binary directly rather than via `cargo run`):
 
 ```bash
-export X86_64_OPENVMM_UEFI_FIRMWARE=$PWD/.packages/hyperv.uefi.mscoreuefi.x64.RELEASE/MsvmX64/RELEASE_VS2022/FV/MSVM.fd
+export X86_64_OPENVMM_UEFI_FIRMWARE=/opt/openvmm/MSVM.fd
 ```
 
 Create a working directory for guest images and sockets:
@@ -275,30 +391,34 @@ paravisor into VTL2, at which physical addresses, and carries the measurements
 used for attestation. For a confidential (SEV-SNP) guest you need the **CVM**
 recipe.
 
-> **Build host note:** OpenHCL **can only be built on Linux/WSL2** — which is
-> exactly what we have. You can build it directly on this Azure Linux host.
+> **Build host note:** Build OpenHCL on the separate Linux build VM. SNP
+> hardware is required for confidential guest execution, not for compilation.
 
 ### Option A — Download a pre-built IGVM
 From [OpenVMM CI](https://github.com/microsoft/openvmm/actions/workflows/openvmm-ci.yaml),
 download the appropriate `*-openhcl-igvm` artifact (x64 CVM).
 
-### Option B — Build the CVM IGVM locally
+### Option B — Build the CVM IGVM on the build VM
 ```bash
-cd openvmm   # the repo cloned in Stage 3
-# First build pulls many deps; --install-missing-deps lets xflowey install them.
-cargo xflowey build-igvm x64-cvm --release --install-missing-deps
+# Build VM, from the fractal repository root after Stage 3 setup:
+make build-openhcl OPENHCL_RECIPE=x64-cvm OPENHCL_ARGS="--release"
 
 # Output:
-#   flowey-out/artifacts/build-igvm/release/x64-cvm/openhcl-x64-cvm.bin
-cp flowey-out/artifacts/build-igvm/release/x64-cvm/openhcl-x64-cvm.bin \
-   /var/lib/openvmm/openhcl-x64-cvm.bin
+#   build/stage/openhcl/artifacts/build-igvm/release/x64-cvm/openhcl-x64-cvm.bin
+scp build/stage/openhcl/artifacts/build-igvm/release/x64-cvm/openhcl-x64-cvm.bin \
+    "$TEST_HOST:openvmm-deploy/"
 ```
 
-Build **ohcldiag-dev** for diagnostics (it talks to OpenHCL over a VTL2 vsock):
+On the **test machine**, install the transferred IGVM (or the CI-downloaded one):
+
 ```bash
-cargo build --release -p ohcldiag-dev
-# ./target/release/ohcldiag-dev
+sudo install -d /var/lib/openvmm
+sudo install -m 0644 "$HOME/openvmm-deploy/openhcl-x64-cvm.bin" \
+    /var/lib/openvmm/openhcl-x64-cvm.bin
 ```
+
+**ohcldiag-dev** was built and deployed alongside OpenVMM in Stage 3; it talks
+to OpenHCL over a VTL2 vsock.
 
 > **Measurement & attestation note:** The IGVM encodes the launch measurement of
 > VTL2. In production you pin/verify this measurement (and, where used, a CoRIM
@@ -346,7 +466,7 @@ DIAG=/var/lib/openvmm/run/ohcldiag-dev
   --hv --vtl2 \
   --igvm "firmware=${IGVM},personality=openhcl" \
   --isolation snp \
-  --uefi --secure-boot \
+  --uefi --secure-boot --secure-boot-template windows \
   --tpm \
   --vmbus-scsi id=scsi0,vtl2 \
   --openhcl-controller id=relay0,type=scsi \
