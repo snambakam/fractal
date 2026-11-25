@@ -36,28 +36,27 @@ ls -l /dev/mshv
 /usr/bin/openvmm --version
 ```
 
-Use an account with permission to access `/dev/mshv`. Point `DISK` at a prepared,
-UEFI-bootable Windows VHDX that the account can read and write:
+Use a prepared, UEFI-bootable Windows VHDX that can be read and written.
+The launcher elevates through `sudo` to access `/dev/mshv`.
 
 The repository's
-[`create-windows-vm.sh`](../../support/developer/scripts/create-windows-vm.sh)
-defaults to this VTL0-only configuration using the installed RPM firmware.
-Select the launch mode explicitly with `--mode`:
+[`launch-windows-vm.sh`](../../deployment/dom-0/launch-windows-vm.sh)
+uses the installed RPM firmware. Select `standard` for VTL0-only operation and
+add `--vtpm` to enable the host-emulated vTPM and Windows Secure Boot; these
+features are off by default:
 
 ```bash
-DISK="$HOME/images/windows.vhdx" ./support/developer/scripts/create-windows-vm.sh --mode vtl0
-# Follow-up modes; require MSHV VTL2 support:
-DISK="$HOME/images/windows.vhdx" ./support/developer/scripts/create-windows-vm.sh --mode vtl2
-DISK="$HOME/images/windows.vhdx" ./support/developer/scripts/create-windows-vm.sh --mode snp
+./deployment/dom-0/launch-windows-vm.sh \
+  --mode standard --vhdx "$HOME/images/windows.vhdx" --vtpm
 ```
 
-`vtl2` uses `/usr/share/openhcl/openhcl-x64.bin`; `snp` uses
-`/usr/share/openhcl/openhcl-x64-cvm.bin` and requires SNP-capable hardware.
-Override `IGVM` for a different image built with the corresponding recipe.
-These options select launch arguments; they do not add backend support.
-`DIAG_SOCKET` overrides the OpenHCL socket path, which defaults to
-`$XDG_RUNTIME_DIR/openvmm-windows-<mode>.sock` (or under `$HOME` if
-`XDG_RUNTIME_DIR` is unset). This is a socket, not the `ohcldiag-dev` executable.
+The launcher rejects `openhcl`, `snp`, and `openhcl-snp` before launching:
+the current MSHV backend does not support these Windows boot configurations.
+It does not silently fall back to a non-isolated VM. The former developer
+launcher modes `vtl0` and `vtl2` correspond to `standard` and `openhcl`;
+its OpenHCL-with-SNP mode corresponds to `openhcl-snp`, not `snp`.
+Use `--help` for memory, processor, firmware, executable, and VNC overrides.
+VNC listens on `127.0.0.1:5900` by default; use an SSH tunnel for remote access.
 
 Alternatively, run OpenVMM directly:
 

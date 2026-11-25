@@ -16,7 +16,10 @@ usage() {
     printf '  --firmware PATH     UEFI firmware (default: /usr/share/openvmm/MSVM.fd)\n'
     printf '  --vnc-port PORT     Local VNC port (default: 5900)\n'
     printf '  --openvmm PATH      OpenVMM executable (default: openvmm)\n'
+    printf '  --vtpm              Enable host-emulated vTPM and Windows Secure Boot\n'
     printf '  -h, --help          Show this help\n'
+    printf '\nWith --vtpm, OpenVMM must be built with the tpm feature.\n'
+    printf 'Firmware/vTPM state is not persistent; do not enable BitLocker.\n'
     printf '\nEnvironment overrides:\n'
     printf '  OPENVMM_BIN            Executable (default: openvmm)\n'
     printf '  OPENVMM_UEFI_FIRMWARE  Firmware (default: /usr/share/openvmm/MSVM.fd)\n'
@@ -32,12 +35,17 @@ firmware="${OPENVMM_UEFI_FIRMWARE:-/usr/share/openvmm/MSVM.fd}"
 memory="${VM_MEMORY:-8GB}"
 processors="${VM_PROCESSORS:-4}"
 vnc_port="${VNC_PORT:-5900}"
+vtpm=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
             usage
             exit 0
+            ;;
+        --vtpm)
+            vtpm=true
+            shift
             ;;
         --mode|--vhdx|--memory|--processors|--firmware|--vnc-port|--openvmm)
             if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
@@ -99,6 +107,10 @@ if [[ $EUID -ne 0 ]]; then
         echo "Error: sudo is required to access /dev/mshv." >&2
         exit 1
     fi
+    script_args=(--mode "$mode" --vhdx "$disk_path")
+    if [[ "$vtpm" == true ]]; then
+        script_args+=(--vtpm)
+    fi
     exec sudo -- env \
         OPENVMM_BIN="$(realpath -- "$openvmm")" \
         OPENVMM_UEFI_FIRMWARE="$firmware" \
@@ -106,7 +118,7 @@ if [[ $EUID -ne 0 ]]; then
         VM_PROCESSORS="$processors" \
         VNC_PORT="$vnc_port" \
         /bin/bash "$(realpath -- "${BASH_SOURCE[0]}")" \
-        --mode "$mode" --vhdx "$disk_path"
+        "${script_args[@]}"
 fi
 
 if [[ ! -f "$disk_path" || ! -s "$disk_path" || ! -r "$disk_path" || ! -w "$disk_path" ]]; then
@@ -139,10 +151,17 @@ echo "Starting Windows VM in '$mode' mode: OpenHCL off, SNP off"
 echo "Disk: $disk (persistent disk writes)"
 echo "Console: VNC at 127.0.0.1:$vnc_port (use an SSH tunnel for remote access)"
 
+vtpm_args=()
+if [[ "$vtpm" == true ]]; then
+    vtpm_args=(--secure-boot --secure-boot-template windows --tpm)
+    echo "Warning: host-emulated vTPM and firmware state are not persistent. Do not enable BitLocker." >&2
+fi
+
 exec "$openvmm" \
     --hypervisor mshv \
     --hv \
     --uefi "firmware=$firmware" \
+    "${vtpm_args[@]}" \
     --disk "file:$disk" \
     --memory "$memory" \
     --processors "$processors" \
